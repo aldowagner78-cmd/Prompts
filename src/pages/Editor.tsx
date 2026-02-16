@@ -243,42 +243,141 @@ export default function Editor() {
     const handleLaunchAntigravity = (text: string) => {
         if (!text) return;
 
-        // Create the .bat content
-        const fileName = "lanzar_antigravity.bat";
-        const desktopPath = "%USERPROFILE%\\Desktop\\MiProyectoAntigravity";
+        // Extract project name from <objective> tag for a meaningful folder name
+        const objectiveMatch = text.match(/<objective>([\s\S]*?)<\/objective>/);
+        const rawName = objectiveMatch
+            ? objectiveMatch[1].trim().split(/\s+/).slice(0, 4).join('_')
+            : 'NuevoProyecto';
+        // Sanitize: only safe characters for Windows folder names
+        const projectName = rawName
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+            .replace(/[^a-zA-Z0-9_\-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '')
+            .substring(0, 40) || 'NuevoProyecto';
+
+        const fileName = `lanzar_${projectName}.bat`;
+        const desktopPath = `%USERPROFILE%\\Desktop\\${projectName}`;
         const finalPath = projectStatus === 'existing' ? (projectPath || ".") : desktopPath;
+        const isNewProject = projectStatus !== 'existing';
 
         const marker = "#BEGIN_PROMPT#";
-        const batHeader = `@echo off
-setlocal
-echo ==========================================
-echo LANZANDO PROYECTO EN ANTIGRAVITY (ALDO PRO)
-echo ==========================================
 
-set "targetDir=${finalPath}"
-
+        const folderLogic = isNewProject
+            ? `:: Proyecto NUEVO: crear carpeta en el Escritorio
 if not exist "%targetDir%" (
-    echo Creando carpeta...
+    echo [INFO] Creando carpeta del proyecto: %targetDir%
     mkdir "%targetDir%"
+    if %ERRORLEVEL% NEQ 0 (
+        echo [ERROR] No se pudo crear la carpeta. Verifica permisos.
+        pause
+        exit /b 1
+    )
 )
-cd /d "%targetDir%"
+echo [OK] Carpeta lista: %targetDir%`
+            : `:: Proyecto EXISTENTE: verificar que la carpeta existe
+if not exist "%targetDir%" (
+    echo [ERROR] La carpeta del proyecto no existe: %targetDir%
+    echo         Verifica la ruta en los Ajustes de PromptMaster.
+    pause
+    exit /b 1
+)
+echo [OK] Proyecto existente encontrado: %targetDir%`;
 
-echo Generando INSTRUCCIONES.md...
-:: Usamos PowerShell para extraer el prompt sin que CMD lo procese
-powershell -Command "$f = [System.IO.File]::ReadAllText('%~f0'); $m = '${marker}'; $idx = $f.IndexOf($m) + $m.Length; $prompt = $f.Substring($idx).Trim(); $prompt | Set-Content -Path 'INSTRUCCIONES.md' -Encoding utf8"
+        const batHeader = `@echo off
+chcp 65001 >nul 2>&1
+setlocal EnableDelayedExpansion
 
 echo.
-echo !TODO LISTO!
-echo Abriendo Antigravity en la terminal...
-start powershell -NoExit -Command "echo '--- INSTRUCCIONES DE ALDO ---'; cat INSTRUCCIONES.md; echo ''; echo 'Lanzando Antigravity...'; npx antigravity ."
+echo  ========================================================
+echo       ANTIGRAVITY LAUNCHER - PROMPTMASTER PRO
+echo  ========================================================
+echo   Proyecto: ${projectName}
+echo   Tipo:     ${isNewProject ? 'NUEVO (se creara carpeta)' : 'EXISTENTE'}
+echo   Fecha:    %date% %time%
+echo  ========================================================
+echo.
+
+:: ===========================================================
+:: PASO 1: Verificar que Antigravity esta instalado
+:: ===========================================================
+where antigravity >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Antigravity no esta instalado o no esta en el PATH.
+    echo.
+    echo Solucion: Instala Antigravity y asegurate de que este en el PATH.
+    echo Si ya esta instalado, cierra y vuelve a abrir la terminal.
+    pause
+    exit /b 1
+)
+for /f "tokens=*" %%v in ('antigravity --version 2^>^&1') do set "AG_VERSION=%%v"
+echo [OK] %AG_VERSION% detectado.
+
+:: ===========================================================
+:: PASO 2: Preparar carpeta del proyecto
+:: ===========================================================
+set "targetDir=${finalPath}"
+
+${folderLogic}
+
+cd /d "%targetDir%"
+
+:: ===========================================================
+:: PASO 3: Generar INSTRUCCIONES.md con el prompt completo
+:: ===========================================================
+echo [INFO] Generando INSTRUCCIONES.md...
+powershell -Command "$f = [System.IO.File]::ReadAllText('%~f0', [System.Text.Encoding]::GetEncoding('utf-8')); $m = '${marker}'; $idx = $f.IndexOf($m) + $m.Length; $prompt = $f.Substring($idx).Trim(); [System.IO.File]::WriteAllText((Join-Path '%targetDir%' 'INSTRUCCIONES.md'), $prompt, [System.Text.Encoding]::UTF8)"
+if not exist "%targetDir%\\INSTRUCCIONES.md" (
+    echo [ERROR] No se pudo generar INSTRUCCIONES.md
+    pause
+    exit /b 1
+)
+echo [OK] INSTRUCCIONES.md generado correctamente.
+
+:: ===========================================================
+:: PASO 4: Abrir Antigravity con la carpeta del proyecto
+:: ===========================================================
+echo [INFO] Abriendo Antigravity con el proyecto...
+start "" antigravity "%targetDir%" -n
+echo [OK] Antigravity abierto en ventana nueva.
+
+:: Esperar a que Antigravity cargue completamente
+echo [INFO] Esperando a que Antigravity cargue (5 segundos)...
+timeout /t 5 /nobreak >nul
+
+:: ===========================================================
+:: PASO 5: Enviar el prompt al chat en Modo Agente
+:: ===========================================================
+echo [INFO] Enviando prompt al chat de Antigravity (Modo Agente)...
+type "%targetDir%\\INSTRUCCIONES.md" | antigravity chat - -r --mode agent --maximize
+echo [OK] Prompt enviado al chat.
+
+:: ===========================================================
+:: PASO 6: Log del lanzamiento
+:: ===========================================================
+echo [%date% %time%] Lanzado: ${projectName} (${isNewProject ? 'nuevo' : 'existente'}) >> "%USERPROFILE%\\Desktop\\promptmaster_launches.log"
+
+echo.
+echo  ========================================================
+echo       LANZAMIENTO COMPLETADO EXITOSAMENTE
+echo  ========================================================
+echo   Antigravity ya esta trabajando en tu proyecto.
+echo   El prompt completo esta en: %targetDir%\\INSTRUCCIONES.md
+echo   Esta ventana se cerrara automaticamente en 10 segundos.
+echo  ========================================================
+echo.
+timeout /t 10
 goto :eof
 
-:: NO BORRAR LA LINEA SIGUIENTE
+:: ============================================================
+:: NO BORRAR LA LINEA SIGUIENTE - CONTIENE EL PROMPT COMPLETO
+:: ============================================================
 ${marker}
 `;
         const batContent = batHeader + text;
 
-        const blob = new Blob([batContent], { type: "text/plain" });
+        // Download the .bat file
+        const blob = new Blob([batContent], { type: "application/x-bat;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -288,7 +387,7 @@ ${marker}
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        alert("¡Archivo .bat generado! Ejecútalo para abrir Antigravity automáticamente.");
+        alert(`¡Archivo "${fileName}" generado!\n\nAl ejecutarlo:\n1. Verificará que Antigravity esté instalado\n2. ${isNewProject ? 'Creará la carpeta "' + projectName + '" en tu Escritorio' : 'Abrirá el proyecto existente'}\n3. Generará INSTRUCCIONES.md\n4. Abrirá Antigravity en ventana nueva\n5. Enviará el prompt al chat en Modo Agente`);
     }
 
     const handleCopy = (text: string) => {
