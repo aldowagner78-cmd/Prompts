@@ -376,8 +376,19 @@ ${marker}
 `;
         const batContent = batHeader + text;
 
+        // CRITICAL: Normalize line endings to CRLF for Windows CMD
+        const normalizedContent = batContent.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+        // Add UTF-8 BOM for proper encoding in Windows
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const encoder = new TextEncoder();
+        const contentBytes = encoder.encode(normalizedContent);
+        const finalBytes = new Uint8Array(bom.length + contentBytes.length);
+        finalBytes.set(bom);
+        finalBytes.set(contentBytes, bom.length);
+
         // Download the .bat file
-        const blob = new Blob([batContent], { type: "application/x-bat;charset=utf-8" });
+        const blob = new Blob([finalBytes], { type: "application/octet-stream" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
