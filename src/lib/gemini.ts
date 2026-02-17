@@ -94,14 +94,25 @@ export async function generateOptimizedPrompt(originalPrompt: string, config: an
   
   Fase 1: PROTOTIPADO VISUAL (Google Stitch)
   → Crear TODAS las interfaces visuales de la aplicación en Stitch. No solo las principales.
+    
+    IMPORTANTE - UI KIT & ASSETS (OBLIGATORIO):
+    Generar una lámina específica llamada "UI_KIT" que contenga por separado:
+    * Botones en todos sus estados (primary, secondary, danger, disabled)
+    * Inputs, TextAreas, Toggles y Checkboxes con sus estados (focus, error)
+    * Paleta de colores completa (bg, text, accents)
+    * Tipografía (H1, H2, H3, Body, Caption)
+    * Iconografía base a utilizar
+    * Componentes de Feedback (Alertas, Toasts, Badges)
+    Esto servirá para implementar un Design System consistente desde el inicio.
+
     CHECKLIST MÍNIMO DE PANTALLAS:
     * Splash / Loading screen
     * Onboarding (si aplica para primera vez)
     * Home / Dashboard principal
     * CADA pantalla de funcionalidad (una por cada feature)
     * Pantalla de Configuración / Ajustes
-    * Estados vacíos (cuando no hay datos)
-    * Estados de error (cuando algo falla)
+    * Estados vacíos (Empty States - cuando no hay datos)
+    * Estados de error (Error States - cuando algo falla)
     * Modales / Diálogos de confirmación
     Una vez que el usuario APRUEBE los diseños de Stitch, esos diseños son INMUTABLES.
   
@@ -109,6 +120,24 @@ export async function generateOptimizedPrompt(originalPrompt: string, config: an
   → Implementar los diseños de Stitch en código, respetando al 100% la estética aprobada.
     Seguir el orden A-E-F: primero estética (CSS/Tailwind para replicar Stitch), 
     luego estructura (componentes/rutas), finalmente función (lógica de negocio).
+
+    STACK TECNOLÓGICO RÍGIDO (NO INVENTAR):
+    * Core: Vite + React + TypeScript
+    * Estilos: Tailwind CSS (sin preprocesadores complejos)
+    * Iconos: lucide-react (OBLIGATORIO, estándar y ligero)
+    * Router: react-router-dom (v6+)
+    * Gestión de Estado: React Context API (para apps medianas) o Zustand (si es muy compleja)
+    * Package Manager: npm (estándar universal)
+
+    REGLAS DE ORO DE IMPLEMENTACIÓN (ZERO ERROR TOLERANCE):
+    1. SEED DATA OBLIGATORIO: La app NO PUEDE iniciar vacía. Debe tener datos de prueba (mock data)
+       precargados para que se vea "viva" y funcional desde el primer segundo.
+       Ej: Si es una To-Do list, debe traer 3 tareas de ejemplo.
+    2. MANEJO DE ERRORES VISUAL: Prohibido dejar pantallas en blanco (White Screen of Death).
+       Implementar Error Boundaries simples y Try/Catch en toda llamada async (Firebase/API)
+       que muestre un Toast o Alerta amigable si falla.
+    3. PLACEHOLDERS CONFIABLES: Si necesitas imágenes y no tienes, usa 'https://placehold.co/600x400'
+       o crea componentes SVG/CSS puros. NO dejes 'img src=""' rotos.
   
   Fase 3: PERSISTENCIA Y BACKEND (Firebase)
   → Configurar Auth, Firestore y Hosting. Desplegar como PWA.
